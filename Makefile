@@ -45,7 +45,7 @@ help:
 # Build for the local architecture
 .PHONY: build
 build:
-	go build -o $(BINARY_NAME) -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 go build -o $(BINARY_NAME) -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
 
 # Install the binary
 .PHONY: install
@@ -66,7 +66,7 @@ release: clean
 	mkdir -p $(RELEASE_DIR)
 	$(foreach platform,$(PLATFORMS),\
 		$(foreach arch,$(ARCHS),\
-			GOOS=$(platform) GOARCH=$(arch) go build -o $(RELEASE_DIR)/$(BINARY_NAME)$(if $(findstring windows,$(platform)),.exe,) -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)" && \
+			CGO_ENABLED=0 GOOS=$(platform) GOARCH=$(arch) go build -o $(RELEASE_DIR)/$(BINARY_NAME)$(if $(findstring windows,$(platform)),.exe,) -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)" && \
 			tar -czf $(RELEASE_DIR)/$(BINARY_NAME)-$(platform)-$(arch)-$(VERSION).tar.gz -C $(RELEASE_DIR) $(BINARY_NAME)$(if $(findstring windows,$(platform)),.exe,) && \
 			rm $(RELEASE_DIR)/$(BINARY_NAME)$(if $(findstring windows,$(platform)),.exe,) \
 		;)\
@@ -85,20 +85,20 @@ build-all: build-linux build-darwin build-windows
 .PHONY: build-linux
 build-linux:
 	mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
-	GOOS=linux GOARCH=arm64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
-	GOOS=linux GOARCH=arm GOARM=7 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
 
 .PHONY: build-darwin
 build-darwin:
 	mkdir -p $(BUILD_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
-	GOOS=darwin GOARCH=arm64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
 
 .PHONY: build-windows
 build-windows:
 	mkdir -p $(BUILD_DIR)
-	GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe -ldflags "-X github.com/navaneethkn/cronocam/internal/cmd.Version=$(VERSION)"
 
 # Test
 .PHONY: test
