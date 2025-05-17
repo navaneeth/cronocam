@@ -48,7 +48,7 @@ func GetSupportedFormats() map[string]bool {
 	return supported
 }
 
-func Initialize() error {
+func Initialize(configFile string) error {
 	var initErr error
 	once.Do(func() {
 		v = viper.New()
@@ -67,30 +67,43 @@ func Initialize() error {
 		v.SetEnvPrefix("PHOTOS")
 		v.AutomaticEnv()
 
-		// Config file
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				initErr = fmt.Errorf("could not find home directory: %v", err)
+		// Handle config file
+		if configFile != "" {
+			// Use config file from the flag
+			v.SetConfigFile(configFile)
+
+			// Check if specified config file exists
+			if _, err := os.Stat(configFile); os.IsNotExist(err) {
+				initErr = fmt.Errorf("config file not found: %s", configFile)
 				return
 			}
-			configHome = filepath.Join(home, ".config")
+		} else {
+			// Search for config in default locations
+			v.SetConfigName("config")
+			v.SetConfigType("yaml")
+			v.AddConfigPath(".")
+
+			// Add user config directory
+			if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
+				v.AddConfigPath(filepath.Join(configHome, "photos-uploader"))
+			} else if home, err := os.UserHomeDir(); err == nil {
+				v.AddConfigPath(filepath.Join(home, ".config/photos-uploader"))
+			}
 		}
 
-		v.SetConfigName("config")
-		v.SetConfigType("yaml")
-		v.AddConfigPath(".")
-		v.AddConfigPath(filepath.Join(configHome, "photos-uploader"))
-
-		// Try to read config file, but don't fail if not found
+		// Try to read config file
 		if err := v.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				// Config file not found, using defaults
-				fmt.Printf("No config file found, using default values\n")
+			if configFile != "" {
+				// If config file was explicitly specified but can't be read, fail
+				initErr = fmt.Errorf("error reading config file: %v", err)
+				return
+			} else if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+				// Config file not found in default locations
+				fmt.Println("No config file found, using default values")
 			} else {
 				// Config file found but has errors
-				fmt.Printf("Warning: Error in config file: %v\nUsing default values\n", err)
+				initErr = fmt.Errorf("error reading config file: %v", err)
+				return
 			}
 		} else {
 			fmt.Printf("Using config file: %s\n", v.ConfigFileUsed())
