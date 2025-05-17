@@ -24,6 +24,7 @@ func init() {
 
 	// Add flags
 	uploadCmd.Flags().BoolP("recursive", "r", true, "recursively search for files in subdirectories")
+	uploadCmd.Flags().Int64P("max-files", "m", 0, "maximum number of files to upload (0 for unlimited)")
 	uploadCmd.Flags().BoolP("force", "f", false, "force upload even if file was previously uploaded")
 }
 
@@ -34,6 +35,7 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	// Get flags
 	recursive, _ := cmd.Flags().GetBool("recursive")
 	force, _ := cmd.Flags().GetBool("force")
+	maxFiles, _ := cmd.Flags().GetInt64("max-files")
 
 	// Convert to absolute path
 	absPath, err := filepath.Abs(dirPath)
@@ -80,5 +82,5 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start upload process
-	return uploadPhotos(recursive, force)
+	return uploadPhotos(recursive, force, maxFiles)
 }

@@ -44,7 +44,7 @@ func setupAuth() error {
 	return nil
 }
 
-func uploadPhotos(recursive, force bool) error {
+func uploadPhotos(recursive, force bool, maxFiles int64) error {
 	ctx := context.Background()
 
 	// Initialize authenticator
@@ -77,10 +77,18 @@ func uploadPhotos(recursive, force bool) error {
 		return fmt.Errorf("failed to create uploader: %v", err)
 	}
 
+	// Track number of files uploaded
+	var uploadCount int64
+
 	// Walk function for processing files
 	walkFn := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Check if we've hit the upload limit
+		if maxFiles > 0 && uploadCount >= maxFiles {
+			return filepath.SkipAll
 		}
 
 		// Skip directories if not recursive
@@ -136,6 +144,13 @@ func uploadPhotos(recursive, force bool) error {
 		}
 
 		log.Printf("Successfully uploaded %s", path)
+		uploadCount++
+
+		// Check if we've hit the limit after successful upload
+		if maxFiles > 0 && uploadCount >= maxFiles {
+			log.Printf("Reached upload limit of %d files", maxFiles)
+			return filepath.SkipAll
+		}
 		return nil
 	}
 
