@@ -44,6 +44,103 @@ func setupAuth() error {
 	return nil
 }
 
+// uploadFiles uploads a specific list of files
+func uploadFiles(files []string, force bool, maxFiles int64) error {
+	ctx := context.Background()
+
+	// Initialize authenticator
+	authenticator, err := auth.New(config.GetCredentialsPath())
+	if err != nil {
+		return fmt.Errorf("failed to create authenticator: %v", err)
+	}
+
+	// Get OAuth2 client
+	client, err := authenticator.GetClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get client: %v", err)
+	}
+
+	// Initialize database
+	database, err := db.New(config.GetDatabasePath())
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %v", err)
+	}
+	defer database.Close()
+
+	// Initialize uploader with configuration
+	photoUploader, err := uploader.New(client, uploader.Config{
+		ChunkSize:          config.GetChunkSize(),
+		MaxRetries:         config.GetMaxRetries(),
+		RequestsPerSecond:  config.GetRequestsPerSecond(),
+		MaxBurst:           config.GetMaxBurst(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create uploader: %v", err)
+	}
+
+	// Track number of files uploaded
+	var uploadCount int64
+
+	// Process each file
+	for _, path := range files {
+		// Check if we've hit the upload limit
+		if maxFiles > 0 && uploadCount >= maxFiles {
+			log.Printf("Reached upload limit of %d files", maxFiles)
+			break
+		}
+
+		if !photoUploader.IsSupportedFile(path) {
+			log.Printf("Skipping unsupported file: %s", path)
+			continue
+		}
+
+		// Calculate file hash
+		hash, err := photoUploader.CalculateFileHash(path)
+		if err != nil {
+			log.Printf("Failed to calculate hash for %s: %v", path, err)
+			continue
+		}
+
+		// Check if file was already uploaded
+		if !force {
+			uploaded, err := database.IsFileUploaded(hash)
+			if err != nil {
+				log.Printf("Failed to check upload status for %s: %v", path, err)
+				continue
+			}
+
+			if uploaded {
+				log.Printf("Skipping %s (already uploaded)", path)
+				continue
+			}
+		}
+
+		// Upload file
+		log.Printf("Uploading %s...", path)
+		googleID, err := photoUploader.UploadFile(ctx, path)
+		if err != nil {
+			log.Printf("Failed to upload %s: %v", path, err)
+			continue
+		}
+
+		// Save to database
+		err = database.SaveUploadedFile(&db.UploadedFile{
+			FilePath: path,
+			FileHash: hash,
+			GoogleID: googleID,
+		})
+		if err != nil {
+			log.Printf("Failed to save upload record for %s: %v", path, err)
+			continue
+		}
+
+		log.Printf("Successfully uploaded %s", path)
+		uploadCount++
+	}
+
+	return nil
+}
+
 func uploadPhotos(recursive, force bool, maxFiles int64) error {
 	ctx := context.Background()
 
