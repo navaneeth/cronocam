@@ -171,6 +171,29 @@ func (d *DB) GetPendingFiles() ([]string, error) {
 	return files, nil
 }
 
+func (d *DB) GetFailedFiles() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT DISTINCT file_path 
+		FROM upload_errors 
+		WHERE file_path NOT IN (SELECT file_path FROM uploaded_files)
+		ORDER BY timestamp DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		files = append(files, path)
+	}
+	return files, nil
+}
+
 func (d *DB) GetRecentErrors() ([]UploadError, error) {
 	rows, err := d.db.Query(`
 		SELECT file_path, error_message, timestamp 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/navaneethkn/cronocam/internal/config"
+	"github.com/navaneethkn/cronocam/internal/db"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,11 @@ Tracks uploaded files to avoid duplicates.
 
 You can also provide a text file containing a list of file paths to upload
 using the --file-list option. Each line in the file should be a full path
-to a photo or video file.`,
+to a photo or video file.
+
+Use --retry-failed to retry uploading files that previously failed to upload.
+This will attempt to upload any files that are in the error log but not yet
+successfully uploaded.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUpload,
 }
@@ -32,6 +37,7 @@ func init() {
 	uploadCmd.Flags().Int64P("max-files", "m", 0, "maximum number of files to upload (0 for unlimited)")
 	uploadCmd.Flags().BoolP("force", "f", false, "force upload even if file was previously uploaded")
 	uploadCmd.Flags().StringP("file-list", "l", "", "path to text file containing list of files to upload")
+	uploadCmd.Flags().BoolP("retry-failed", "x", false, "retry uploading previously failed files")
 }
 
 func runUpload(cmd *cobra.Command, args []string) error {
@@ -40,13 +46,36 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	var force bool
 	var maxFiles int64
 	var fileList string
+	var retryFailed bool
 	recursive, _ = cmd.Flags().GetBool("recursive")
 	force, _ = cmd.Flags().GetBool("force")
 	maxFiles, _ = cmd.Flags().GetInt64("max-files")
 	fileList, _ = cmd.Flags().GetString("file-list")
+	retryFailed, _ = cmd.Flags().GetBool("retry-failed")
 
-	// Check if using file list
-	if fileList != "" {
+	// Initialize database for getting failed files
+	database, err := db.New(config.GetDatabasePath())
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %v", err)
+	}
+	defer database.Close()
+
+	// Get list of files to upload
+	var files []string
+
+	// If retrying failed files
+	if retryFailed {
+		// Get failed files from database
+		files, err = database.GetFailedFiles()
+		if err != nil {
+			return fmt.Errorf("failed to get failed files: %v", err)
+		}
+		if len(files) == 0 {
+			fmt.Println("No failed files to retry")
+			return nil
+		}
+		fmt.Printf("Found %d failed files to retry\n", len(files))
+	} else if fileList != "" {
 		// Read file paths from text file
 		fileData, err := os.ReadFile(fileList)
 		if err != nil {
@@ -54,7 +83,6 @@ func runUpload(cmd *cobra.Command, args []string) error {
 		}
 
 		// Split into lines and filter empty lines
-		var files []string
 		for _, line := range strings.Split(string(fileData), "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" {
