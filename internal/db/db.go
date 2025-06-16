@@ -23,6 +23,7 @@ type UploadedFile struct {
 
 type UploadStats struct {
 	TotalUploaded  int64
+	TotalErrors    int64
 	LastUploadTime *time.Time
 }
 
@@ -60,7 +61,14 @@ func initSchema(db *sql.DB) error {
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 		UNIQUE(file_hash)
 	);
-	CREATE INDEX IF NOT EXISTS idx_file_hash ON uploaded_files(file_hash);`
+	CREATE INDEX IF NOT EXISTS idx_file_hash ON uploaded_files(file_hash);
+
+	CREATE TABLE IF NOT EXISTS upload_errors (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		file_path TEXT NOT NULL,
+		error_message TEXT NOT NULL,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
 
 	_, err := db.Exec(schema)
 	return err
@@ -80,6 +88,14 @@ func (d *DB) SaveUploadedFile(file *UploadedFile) error {
 	_, err := d.db.Exec(
 		"INSERT INTO uploaded_files (file_path, file_hash, google_id) VALUES (?, ?, ?)",
 		file.FilePath, file.FileHash, file.GoogleID,
+	)
+	return err
+}
+
+func (d *DB) SaveUploadError(filePath string, errorMessage string) error {
+	_, err := d.db.Exec(
+		"INSERT INTO upload_errors (file_path, error_message) VALUES (?, ?)",
+		filePath, errorMessage,
 	)
 	return err
 }
@@ -108,6 +124,12 @@ func (d *DB) GetUploadStats() (*UploadStats, error) {
 
 	// Get total count
 	err := d.db.QueryRow("SELECT COUNT(*) FROM uploaded_files").Scan(&stats.TotalUploaded)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get total errors
+	err = d.db.QueryRow("SELECT COUNT(*) FROM upload_errors").Scan(&stats.TotalErrors)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +172,30 @@ func (d *DB) GetPendingFiles() ([]string, error) {
 }
 
 func (d *DB) GetRecentErrors() ([]UploadError, error) {
-	// This is a placeholder implementation. In a real implementation,
-	// you would store and retrieve errors from a dedicated errors table.
-	return []UploadError{}, nil
+	rows, err := d.db.Query(`
+		SELECT file_path, error_message, timestamp 
+		FROM upload_errors 
+		ORDER BY timestamp DESC 
+		LIMIT 10
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var errors []UploadError
+	for rows.Next() {
+		var uploadErr UploadError
+		var timeStr string
+		if err := rows.Scan(&uploadErr.File, &uploadErr.Message, &timeStr); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse("2006-01-02 15:04:05", timeStr)
+		if err != nil {
+			return nil, err
+		}
+		uploadErr.Time = t
+		errors = append(errors, uploadErr)
+	}
+	return errors, nil
 }

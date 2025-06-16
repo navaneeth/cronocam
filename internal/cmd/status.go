@@ -59,7 +59,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Format output
 	fmt.Printf("Upload Status:\n")
 	fmt.Printf("-------------\n")
-	fmt.Printf("Total files uploaded: %d\n", stats.TotalUploaded)
+	fmt.Printf("Total uploaded: %d file%s\n", stats.TotalUploaded, pluralize(int(stats.TotalUploaded)))
+	fmt.Printf("Total failed: %d file%s\n", stats.TotalErrors, pluralize(int(stats.TotalErrors)))
 	
 	if stats.LastUploadTime != nil {
 		relativeTime := formatRelativeTime(*stats.LastUploadTime)

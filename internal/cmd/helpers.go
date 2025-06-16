@@ -78,12 +78,13 @@ func uploadFiles(files []string, force bool, maxFiles int64) error {
 		return fmt.Errorf("failed to create uploader: %v", err)
 	}
 
-	// Track number of files uploaded
-	var uploadCount int64
+	// Track number of uploads and failures
+	uploadCount := int64(0)
+	failureCount := int64(0)
 
 	// Process each file
 	for _, path := range files {
-		// Check if we've hit the upload limit
+		// Skip if max files reached
 		if maxFiles > 0 && uploadCount >= maxFiles {
 			log.Printf("Reached upload limit of %d files", maxFiles)
 			break
@@ -98,14 +99,22 @@ func uploadFiles(files []string, force bool, maxFiles int64) error {
 		hash, err := photoUploader.CalculateFileHash(path)
 		if err != nil {
 			log.Printf("Failed to calculate hash for %s: %v", path, err)
+			if err := database.SaveUploadError(path, fmt.Sprintf("Failed to calculate hash: %v", err)); err != nil {
+				log.Printf("Failed to save error record: %v", err)
+			}
+			failureCount++
 			continue
 		}
 
-		// Check if file was already uploaded
+		// Check if already uploaded
 		if !force {
 			uploaded, err := database.IsFileUploaded(hash)
 			if err != nil {
 				log.Printf("Failed to check upload status for %s: %v", path, err)
+				if err := database.SaveUploadError(path, fmt.Sprintf("Failed to check upload status: %v", err)); err != nil {
+					log.Printf("Failed to save error record: %v", err)
+				}
+				failureCount++
 				continue
 			}
 
@@ -120,6 +129,10 @@ func uploadFiles(files []string, force bool, maxFiles int64) error {
 		googleID, err := photoUploader.UploadFile(ctx, path)
 		if err != nil {
 			log.Printf("Failed to upload %s: %v", path, err)
+			if err := database.SaveUploadError(path, fmt.Sprintf("Failed to upload: %v", err)); err != nil {
+				log.Printf("Failed to save error record: %v", err)
+			}
+			failureCount++
 			continue
 		}
 
@@ -131,11 +144,20 @@ func uploadFiles(files []string, force bool, maxFiles int64) error {
 		})
 		if err != nil {
 			log.Printf("Failed to save upload record for %s: %v", path, err)
+			if err := database.SaveUploadError(path, fmt.Sprintf("Failed to save upload record: %v", err)); err != nil {
+				log.Printf("Failed to save error record: %v", err)
+			}
+			failureCount++
 			continue
 		}
 
 		log.Printf("Successfully uploaded %s", path)
 		uploadCount++
+	}
+
+	// Return error if any uploads failed
+	if failureCount > 0 {
+		return fmt.Errorf("%d upload(s) failed", failureCount)
 	}
 
 	return nil
